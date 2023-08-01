@@ -411,7 +411,7 @@ mod test {
             ChaCha20Poly1305,
             HkdfSha256,
             crate::kem::xyber768d00::X25519Kyber768Draft00,
-            false
+            true
         );
         test_setup_soundness!(
             test_setup_soundness_xyber768d00,

@@ -161,16 +161,6 @@ impl KemTrait for X25519Kyber768Draft00 {
 
     const KEM_ID: u16 = 0x30;
 
-    // X25519Kyber768Draft00 v2 §3.3
-    // def DeriveKeyPair(ikm):
-    //   dkp_prk = LabeledExtract("", "dkp_prk", ikm)
-    //   seed = LabeledExpand(dkp_prk, "sk", 32 + 64)
-    //   seed1 = seed[0:32]
-    //   seed2 = seed[32:96]
-    //   sk1, pk1 = X25519KEM.DeriveKeyPair(seed1)
-    //   sk2, pk2 = Kyber768Draft00.DeriveKeyPair(seed2)
-    //   return (concat(sk1, sk2), concat(pk1, pk2))
-
     /// Deterministically derives a keypair from the given input keying material and ciphersuite
     /// ID. The keying material SHOULD have at least 256 bits of entropy.
     fn derive_keypair(ikm: &[u8]) -> (Self::PrivateKey, Self::PublicKey) {
@@ -212,17 +202,6 @@ impl KemTrait for X25519Kyber768Draft00 {
         }
     }
 
-    // X25519Kyber768Draft00 v2 §3.4
-    //
-    // def Encap(pkR):
-    //   (pkA, pkB) = pkR
-    //   (ss1, enc1) = X25519KEM.Encap(pkA)
-    //   (ss2, enc2) = Kyber768Draft00.Encap(pkB)
-    //   return (
-    //     concat(ss1, ss2),
-    //     concat(enc1, enc2)
-    //   )
-
     /// Does an X25519-Kyber768 encapsulation. This does not support sender authentication.
     /// `sender_id_keypair` must be `None`. Otherwise, this returns
     /// [`HpkeError::AuthnotSupportedError`].
@@ -231,13 +210,9 @@ impl KemTrait for X25519Kyber768Draft00 {
         sender_id_keypair: Option<(&Self::PrivateKey, &Self::PublicKey)>,
         csprng: &mut R,
     ) -> Result<(SharedSecret<Self>, Self::EncappedKey), HpkeError> {
-        // Kyber doesn't support sender authentication
-        if sender_id_keypair.is_some() {
-            return Err(HpkeError::AuthNotSupportedError);
-        }
-
         // Encap using both KEMs
-        let (ss1, enc1) = X25519HkdfSha256::encap(&pk_recip.x, None, csprng)?;
+        let xsender = sender_id_keypair.map(|(sk, pk)| (&sk.x, &pk.x));
+        let (ss1, enc1) = X25519HkdfSha256::encap(&pk_recip.x, xsender, csprng)?;
         let (enc2, ss2) =
             pqc_kyber::encapsulate(&pk_recip.k, csprng).map_err(|_| HpkeError::EncapError)?;
 
@@ -255,15 +230,6 @@ impl KemTrait for X25519Kyber768Draft00 {
         ))
     }
 
-    // X25519Kyber768Draft00 v2 §3.4
-    // def Decap(enc, skR):
-    //   (skA, skB) = skR
-    //   enc1 = enc[0:32]
-    //   enc2 = enc[32:1120]
-    //   ss1 = DHKEM.Decap(enc1, skA)
-    //   ss2 = Kyber768Draft00.Decap(enc2, skB)
-    //   return concat(ss1, ss2)
-
     /// Does an X25519-Kyber768 decapsulation. This does not support sender authentication.
     /// `pk_sender_id` must be `None`. Otherwise, this returns
     /// [`HpkeError::AuthnotSupportedError`].
@@ -272,13 +238,8 @@ impl KemTrait for X25519Kyber768Draft00 {
         pk_sender_id: Option<&Self::PublicKey>,
         encapped_key: &Self::EncappedKey,
     ) -> Result<SharedSecret<Self>, HpkeError> {
-        // Kyber doesn't support sender authentication
-        if pk_sender_id.is_some() {
-            return Err(HpkeError::AuthNotSupportedError);
-        }
-
         // Decapsulate with both KEMs
-        let ss1 = X25519HkdfSha256::decap(&sk_recip.x, None, &encapped_key.x)?;
+        let ss1 = X25519HkdfSha256::decap(&sk_recip.x, pk_sender_id.map(|pk| &pk.x), &encapped_key.x)?;
         let ss2 = pqc_kyber::decapsulate(&encapped_key.k, &sk_recip.k)
             .map_err(|_| HpkeError::DecapError)?;
 
