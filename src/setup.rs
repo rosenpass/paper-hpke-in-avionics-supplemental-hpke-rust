@@ -420,4 +420,23 @@ mod test {
             crate::kem::xyber768d00::X25519Kyber768Draft00
         );
     }
+
+    #[cfg(feature = "xyber768d00")]
+    mod xyber768d00dilithium_tests {
+        use super::*;
+
+        test_setup_correctness!(
+            test_setup_correctness_xyber768d00dilithium,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber768d00dilithium::X25519Kyber768Dilithium,
+            true
+        );
+        test_setup_soundness!(
+            test_setup_soundness_xyber768d00,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber768d00dilithium::X25519Kyber768Dilithium
+        );
+    }
 }

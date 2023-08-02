@@ -12,9 +12,17 @@ use generic_array::{
     GenericArray,
 };
 use sha3::{Shake256, digest::{Update, ExtendableOutput, XofReader}};
-use rand_core::{CryptoRng, RngCore};
 use pqc_kyber::Keypair as KyberKeypair;
+use rand_core::{CryptoRng, RngCore};
 use subtle::{Choice, ConstantTimeEq};
+
+type DilithiumPubkeyLen = <typenum::U1000 as core::ops::Add<typenum::U952>>::Output;
+type DilithiumPrivkeyLen = <<typenum::U2048
+    as core::ops::Add<typenum::U1024>>::Output
+    as core::ops::Add<typenum::U928>>::Output;
+type DilithiumSignatureLen = <<typenum::U2048
+    as core::ops::Add<typenum::U1024>>::Output
+    as core::ops::Add<typenum::U221>>::Output;
 
 type KyberPubkeyLen = <typenum::U1000 as core::ops::Add<typenum::U184>>::Output;
 type KyberPrivkeyLen = <<typenum::U1000 as core::ops::Add<typenum::U1000>>::Output as core::ops::Add<
@@ -25,49 +33,54 @@ type KyberEncappedKeyLen = <typenum::U1000 as core::ops::Add<typenum::U88>>::Out
 // We use GenericArray rather than normal fixed-size arrays because we need serde impls, and serde
 // doesn't support generic constants yet
 
-/// An X25519-Kyber768 public key. This holds an X25519 public key and a Kyber768 public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serde_impls", derive(serde::Serialize, serde::Deserialize))]
 #[doc(hidden)]
 pub struct PublicKey {
     x: <X25519HkdfSha256 as KemTrait>::PublicKey,
     k: GenericArray<u8, KyberPubkeyLen>,
+    d: GenericArray<u8, DilithiumPubkeyLen>,
 }
 
-/// An X25519-Kyber768 private key. This holds an X25519 private key and a Kyber768 private key.
 #[derive(Clone)]
 #[cfg_attr(feature = "serde_impls", derive(serde::Serialize, serde::Deserialize))]
 #[doc(hidden)]
 pub struct PrivateKey {
     x: <X25519HkdfSha256 as KemTrait>::PrivateKey,
     k: GenericArray<u8, KyberPrivkeyLen>,
+    d: GenericArray<u8, DilithiumPrivkeyLen>,
+    d_seed: GenericArray<u8, typenum::U32>,
 }
 
-/// Holds the content of an encapsulated secret. This is what the receiver uses to derive the
-/// shared secret. Since this is a hybrid KEM, it holds a DH encapped key and a Kyber encapped key.
 #[derive(Clone)]
 #[cfg_attr(feature = "serde_impls", derive(serde::Serialize, serde::Deserialize))]
 #[doc(hidden)]
 pub struct EncappedKey {
     x: <X25519HkdfSha256 as KemTrait>::EncappedKey,
     k: GenericArray<u8, KyberEncappedKeyLen>,
+    d: GenericArray<u8, DilithiumSignatureLen>,
 }
 
-// X25519Kyber768Draft00 v2 §5: Nenc of X25519Kyber768Draft00 is 1120
-type XyberEncappedKeyLen = <typenum::U1000 as core::ops::Add<typenum::U120>>::Output;
-// X25519Kyber768Draft00 v2 §5: Npk of X25519Kyber768Draft00 is 1216
-type XyberPubkeyLen = <typenum::U1000 as core::ops::Add<typenum::U216>>::Output;
-// X25519Kyber768Draft00 v2 §5: Nsk of X25519Kyber768Draft00 is 2432
-type XyberPrivkeyLen = <<typenum::U1000 as core::ops::Add<typenum::U1000>>::Output as core::ops::Add<
-    typenum::U432,
->>::Output;
+type XyberDilithiumEncappedKeyLen = <
+    typenum::U32 as core::ops::Add<<
+        KyberEncappedKeyLen as core::ops::Add<
+            DilithiumSignatureLen>>::Output>>::Output;
+type XyberDilithiumPubkeyLen = <
+    typenum::U32 as core::ops::Add<<
+        KyberPubkeyLen as core::ops::Add<
+            DilithiumPubkeyLen>>::Output>>::Output;
+type XyberDilithiumPrivkeyLen = <
+    typenum::U32 as core::ops::Add<<
+        KyberPrivkeyLen as core::ops::Add<<
+            DilithiumPrivkeyLen as core::ops::Add<
+                typenum::U32>>::Output>>::Output>>::Output;
 
 impl Serializable for EncappedKey {
-    type OutputSize = XyberEncappedKeyLen;
+    type OutputSize = XyberDilithiumEncappedKeyLen;
 
     fn to_bytes(&self) -> GenericArray<u8, Self::OutputSize> {
         // Output X25519 encapped key || Kyber encapped key
-        self.x.to_bytes().concat(self.k)
+        self.x.to_bytes().concat(self.k).concat(self.d)
     }
 }
 
@@ -75,23 +88,26 @@ impl Deserializable for EncappedKey {
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
+        let sep1 = 32;
+        let sep2 = sep1 + KyberEncappedKeyLen::to_usize();
+
         // Grab the X25519 encapped key then the Kyber encapped key. The clone_from_slice(), which
         // can panic, is permitted because of the enforce_equal_len above.
         let x = <<X25519HkdfSha256 as KemTrait>::EncappedKey as Deserializable>::from_bytes(
-            &encoded[..32],
+            &encoded[..sep1],
         )?;
-        let k = GenericArray::clone_from_slice(&encoded[32..]);
+        let k = GenericArray::clone_from_slice(&encoded[sep1..sep2]);
+        let d = GenericArray::clone_from_slice(&encoded[sep2..]);
 
-        Ok(EncappedKey { x, k })
+        Ok(EncappedKey { x, k, d })
     }
 }
 
 impl Serializable for PublicKey {
-    type OutputSize = XyberPubkeyLen;
+    type OutputSize = XyberDilithiumPubkeyLen;
 
     fn to_bytes(&self) -> GenericArray<u8, Self::OutputSize> {
-        // Output X25519 pubkey || Kyber pubkey
-        self.x.to_bytes().concat(self.k)
+        self.x.to_bytes().concat(self.k).concat(self.d)
     }
 }
 
@@ -99,23 +115,26 @@ impl Deserializable for PublicKey {
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
+        let sep1 = 32;
+        let sep2 = sep1 + KyberPubkeyLen::to_usize();
+
         // Grab the X25519 pubkey then the Kyber pubkey. The clone_from_slice(), which can panic,
         // is permitted because of the enforce_equal_len above.
         let x = <<X25519HkdfSha256 as KemTrait>::PublicKey as Deserializable>::from_bytes(
-            &encoded[..32],
+            &encoded[..sep1],
         )?;
-        let k = GenericArray::clone_from_slice(&encoded[32..]);
+        let k = GenericArray::clone_from_slice(&encoded[sep1..sep2]);
+        let d = GenericArray::clone_from_slice(&encoded[sep2..]);
 
-        Ok(PublicKey { x, k })
+        Ok(PublicKey { x, k, d })
     }
 }
 
 impl Serializable for PrivateKey {
-    type OutputSize = XyberPrivkeyLen;
+    type OutputSize = XyberDilithiumPrivkeyLen;
 
     fn to_bytes(&self) -> GenericArray<u8, Self::OutputSize> {
-        // Output X25519 privkey || Kyber privkey
-        self.x.to_bytes().concat(self.k)
+        self.x.to_bytes().concat(self.k).concat(self.d).concat(self.d_seed)
     }
 }
 
@@ -123,14 +142,18 @@ impl Deserializable for PrivateKey {
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
-        // Grab the X25519 privkey then the Kyber privkey. The clone_from_slice(), which can panic,
-        // is permitted because of the enforce_equal_len above.
-        let x = <<X25519HkdfSha256 as KemTrait>::PrivateKey as Deserializable>::from_bytes(
-            &encoded[..32],
-        )?;
-        let k = GenericArray::clone_from_slice(&encoded[32..]);
+        let sep1 = 32;
+        let sep2 = sep1 + KyberPrivkeyLen::to_usize();
+        let sep3 = sep2 + DilithiumPrivkeyLen::to_usize();
 
-        Ok(PrivateKey { x, k })
+        let x = <<X25519HkdfSha256 as KemTrait>::PrivateKey as Deserializable>::from_bytes(
+            &encoded[..sep1]
+        )?;
+        let k = GenericArray::clone_from_slice(&encoded[sep1..sep2]);
+        let d = GenericArray::clone_from_slice(&encoded[sep2..sep3]);
+        let d_seed = GenericArray::clone_from_slice(&encoded[sep3..]);
+
+        Ok(PrivateKey { x, k, d, d_seed })
     }
 }
 
@@ -148,11 +171,10 @@ impl PartialEq for PrivateKey {
 
 impl Eq for PrivateKey {}
 
-#[doc = "Represents X25519Kyber768Draft00 v2"]
-pub struct X25519Kyber768Draft00;
+#[doc = "Represents X25519Kyber768Dilithium v2"]
+pub struct X25519Kyber768Dilithium;
 
-impl KemTrait for X25519Kyber768Draft00 {
-    // X25519Kyber768Draft00 v2 §5: Nsecret of X25519Kyber768Draft00 is 64
+impl KemTrait for X25519Kyber768Dilithium {
     #[doc(hidden)]
     type NSecret = typenum::U64;
 
@@ -160,21 +182,20 @@ impl KemTrait for X25519Kyber768Draft00 {
     type PublicKey = PublicKey;
     type PrivateKey = PrivateKey;
 
-    const KEM_ID: u16 = 0x30;
+    const KEM_ID: u16 = 0x31;
 
-    /// Deterministically derives a keypair from the given input keying material and ciphersuite
-    /// ID. The keying material SHOULD have at least 256 bits of entropy.
-    fn derive_keypair(ikm: &[u8]) -> (Self::PrivateKey, Self::PublicKey) {
         // Hash the IKM
+    fn derive_keypair(ikm: &[u8]) -> (Self::PrivateKey, Self::PublicKey) {
         let suite_id = kem_suite_id::<Self>();
         let (_, dkp_prk) = labeled_extract::<HkdfSha256>(&[], &suite_id, b"dkp_prk", ikm);
 
         // Expand the randomness to fill 2 seeds
-        let mut buf = [0u8; 32 + 64];
+        let mut buf = [0u8; 32 + 64 + 32];
         dkp_prk
             .labeled_expand(&suite_id, b"sk", &[], &mut buf)
             .unwrap();
-        let (seed1, seed2) = buf.split_at(32);
+        let (seed1, seed2_3) = buf.split_at(32);
+        let (seed2, seed3) = seed2_3.split_at(64);
 
         // Generate the keypairs with the two seeds
         let (skx, pkx) = X25519HkdfSha256::derive_keypair(seed1);
@@ -183,23 +204,35 @@ impl KemTrait for X25519Kyber768Draft00 {
             secret: skk,
         } = pqc_kyber::derive(seed2).unwrap();
 
+        let mut skd = GenericArray::<u8, DilithiumPrivkeyLen>::default();
+        let mut pkd = GenericArray::<u8, DilithiumPubkeyLen>::default();
+        crystals_dilithium::sign::lvl3::keypair(pkd.as_mut_slice(), skd.as_mut_slice(), Some(&seed3));
+
         (
             PrivateKey {
                 x: skx,
                 k: GenericArray::clone_from_slice(&skk),
+                d: skd,
+                d_seed: GenericArray::clone_from_slice(&seed3),
             },
             PublicKey {
                 x: pkx,
                 k: GenericArray::clone_from_slice(&pkk),
+                d: pkd,
             },
         )
     }
 
     /// Converts a X25519-Kyber768 private key to a public key
     fn sk_to_pk(sk: &PrivateKey) -> PublicKey {
+        let mut skd = GenericArray::<u8, DilithiumPrivkeyLen>::default();
+        let mut pkd = GenericArray::<u8, DilithiumPubkeyLen>::default();
+        crystals_dilithium::sign::lvl3::keypair(pkd.as_mut_slice(), skd.as_mut_slice(), Some(&sk.d_seed));
+
         PublicKey {
             x: X25519HkdfSha256::sk_to_pk(&sk.x),
             k: GenericArray::clone_from_slice(&pqc_kyber::public(&sk.k)),
+            d: pkd,
         }
     }
 
@@ -217,12 +250,31 @@ impl KemTrait for X25519Kyber768Draft00 {
         let (enc2, ss2) =
             pqc_kyber::encapsulate(&pk_recip.k, csprng).map_err(|_| HpkeError::EncapError)?;
 
-        
         let mut ss = <SharedSecret<Self> as Default>::default();
+        let mut kc = [0u8; 32];
+
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
         kdf.update(&ss1.0);
         kdf.update(&ss2);
-        kdf.finalize_xof().read(&mut ss.0);
+
+
+        let mut kdfr = kdf.finalize_xof();
+        kdfr.read(&mut ss.0);
+        kdfr.read(&mut kc);
+
+        let mut sig = GenericArray::<u8, DilithiumSignatureLen>::default();
+        if let Some((sk, _pk)) = sender_id_keypair {
+            crystals_dilithium::sign::lvl3::signature(&mut sig, &kc, &sk.d, false);
+        }
+
+        // TODO: Constant time
+        // TODO: Implementing our own stream cipher here saves us 16 bytes…is that worth
+        // implementing a stream cipher?
+        let mut buf = [0u8; 1];
+        for i in 0..DilithiumSignatureLen::to_usize() {
+            kdfr.read(&mut buf);
+            sig[i] ^= buf[0];
+        }
 
         // The clone_from_slice, which can panic, is OK because enc2 is a fixed-size array.
         Ok((
@@ -230,6 +282,7 @@ impl KemTrait for X25519Kyber768Draft00 {
             EncappedKey {
                 x: enc1,
                 k: GenericArray::clone_from_slice(&enc2),
+                d: GenericArray::clone_from_slice(&sig),
             },
         ))
     }
@@ -247,13 +300,30 @@ impl KemTrait for X25519Kyber768Draft00 {
         let ss2 = pqc_kyber::decapsulate(&encapped_key.k, &sk_recip.k)
             .map_err(|_| HpkeError::DecapError)?;
 
-        // Compute X25519 shared secret || Kyber shared secret. The unwrap() is OK because ss1.0
-        // and ss2 are fixed-size arrays.
         let mut ss = <SharedSecret<Self> as Default>::default();
+        let mut kc = [0u8; 32];
+
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
         kdf.update(&ss1.0);
         kdf.update(&ss2);
-        kdf.finalize_xof().read(&mut ss.0);
+
+        let mut kdfr = kdf.finalize_xof();
+        kdfr.read(&mut ss.0);
+        kdfr.read(&mut kc);
+
+        if let Some(pk) = pk_sender_id {
+            let mut sig = encapped_key.d.clone();
+
+            let mut buf = [0u8; 1];
+            for i in 0..DilithiumSignatureLen::to_usize() {
+                kdfr.read(&mut buf);
+                sig[i] ^= buf[0];
+            }
+
+            if !crystals_dilithium::sign::lvl3::verify(&sig, &kc, &pk.d) {
+                return Err(HpkeError::DecapError);
+            }
+        }
 
         Ok(ss)
     }

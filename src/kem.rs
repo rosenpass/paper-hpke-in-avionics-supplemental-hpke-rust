@@ -20,6 +20,11 @@ pub(crate) mod xyber768d00;
 #[cfg(feature = "xyber768d00")]
 pub use xyber768d00::*;
 
+#[cfg(feature = "xyber768d00")]
+pub(crate) mod xyber768d00dilithium;
+#[cfg(feature = "xyber768d00")]
+pub use xyber768d00dilithium::*;
+
 #[cfg(feature = "serde_impls")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
