@@ -30,6 +30,8 @@ type KyberPrivkeyLen = <<typenum::U1000 as core::ops::Add<typenum::U1000>>::Outp
 >>::Output;
 type KyberEncappedKeyLen = <typenum::U1000 as core::ops::Add<typenum::U88>>::Output;
 
+const DOMAIN_SEPARATOR : &str = "Karolin Varner, Wanja Zaeske, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768 + Sig:Dilithium3 + KDF:shake256";
+
 // We use GenericArray rather than normal fixed-size arrays because we need serde impls, and serde
 // doesn't support generic constants yet
 
@@ -171,7 +173,6 @@ impl PartialEq for PrivateKey {
 
 impl Eq for PrivateKey {}
 
-#[doc = "Represents X25519Kyber768Dilithium v2"]
 pub struct X25519Kyber768Dilithium;
 
 impl KemTrait for X25519Kyber768Dilithium {
@@ -254,6 +255,7 @@ impl KemTrait for X25519Kyber768Dilithium {
         let mut kc = [0u8; 32];
 
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
+        kdf.update(DOMAIN_SEPARATOR.as_bytes());
         kdf.update(&ss1.0);
         kdf.update(&ss2);
 
@@ -304,6 +306,7 @@ impl KemTrait for X25519Kyber768Dilithium {
         let mut kc = [0u8; 32];
 
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
+        kdf.update(DOMAIN_SEPARATOR.as_bytes());
         kdf.update(&ss1.0);
         kdf.update(&ss2);
 

@@ -402,41 +402,41 @@ mod test {
         );
     }
 
-    #[cfg(feature = "xyber768d00")]
+    #[cfg(feature = "xyber768")]
     mod xyber768d00_tests {
         use super::*;
 
         test_setup_correctness!(
-            test_setup_correctness_xyber768d00,
+            test_setup_correctness_xyber768,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768d00::X25519Kyber768Draft00,
+            crate::kem::xyber768::X25519Kyber768,
             true
         );
         test_setup_soundness!(
-            test_setup_soundness_xyber768d00,
+            test_setup_soundness_xyber768,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768d00::X25519Kyber768Draft00
+            crate::kem::xyber768::X25519Kyber768
         );
     }
 
-    #[cfg(feature = "xyber768d00")]
-    mod xyber768d00dilithium_tests {
+    #[cfg(feature = "xyber768dilithium")]
+    mod xyber768dilithium_tests {
         use super::*;
 
         test_setup_correctness!(
-            test_setup_correctness_xyber768d00dilithium,
+            test_setup_correctness_xyber768dilithium,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768d00dilithium::X25519Kyber768Dilithium,
+            crate::kem::xyber768dilithium::X25519Kyber768Dilithium,
             true
         );
         test_setup_soundness!(
-            test_setup_soundness_xyber768d00,
+            test_setup_soundness_xyber768,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768d00dilithium::X25519Kyber768Dilithium
+            crate::kem::xyber768dilithium::X25519Kyber768Dilithium
         );
     }
 }

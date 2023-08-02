@@ -15,22 +15,21 @@ use zeroize::Zeroize;
 mod dhkem;
 pub use dhkem::*;
 
-#[cfg(feature = "xyber768d00")]
-pub(crate) mod xyber768d00;
-#[cfg(feature = "xyber768d00")]
-pub use xyber768d00::*;
+#[cfg(feature = "xyber768")]
+pub(crate) mod xyber768;
+#[cfg(feature = "xyber768")]
+pub use xyber768::*;
 
-#[cfg(feature = "xyber768d00")]
-pub(crate) mod xyber768d00dilithium;
-#[cfg(feature = "xyber768d00")]
-pub use xyber768d00dilithium::*;
+#[cfg(feature = "xyber768dilithium")]
+pub(crate) mod xyber768dilithium;
+#[cfg(feature = "xyber768dilithium")]
+pub use xyber768dilithium::*;
 
 #[cfg(feature = "serde_impls")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
 /// Represents authenticated encryption functionality
-pub trait Kem: Sized {
-    /// The key exchange's public key type. If you want to generate a keypair, see
+pub trait Kem: Sized { /// The key exchange's public key type. If you want to generate a keypair, see
     /// `Kem::gen_keypair` or `Kem::derive_keypair`
     #[cfg(feature = "serde_impls")]
     type PublicKey: Clone
