@@ -30,7 +30,8 @@ type KyberPrivkeyLen = <<typenum::U1000 as core::ops::Add<typenum::U1000>>::Outp
 >>::Output;
 type KyberEncappedKeyLen = <typenum::U1000 as core::ops::Add<typenum::U88>>::Output;
 
-const DOMAIN_SEPARATOR : &str = "Karolin Varner, Wanja Zaeske, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768 + Sig:Dilithium3 + KDF:shake256";
+const DOMAIN_SEPARATOR_AUTH : &str = "Karolin Varner, Wanja Zaeske, Aaron Kaiser, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768 + Sig:Dilithium3 + KDF:shake256: authenticated";
+const DOMAIN_SEPARATOR_NO_AUTH : &str = "Karolin Varner, Wanja Zaeske, Aaron Kaiser, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768 + Sig:Dilithium3 + KDF:shake256: no authentication";
 
 // We use GenericArray rather than normal fixed-size arrays because we need serde impls, and serde
 // doesn't support generic constants yet
@@ -254,11 +255,20 @@ impl KemTrait for X25519Kyber768Dilithium {
         let mut ss = <SharedSecret<Self> as Default>::default();
         let mut kc = [0u8; 32];
 
+        let domain_sep = match sender_id_keypair {
+            Some(_) => DOMAIN_SEPARATOR_AUTH,
+            None    => DOMAIN_SEPARATOR_NO_AUTH,
+        };
+
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
-        kdf.update(DOMAIN_SEPARATOR.as_bytes());
+        kdf.update(domain_sep.as_bytes());
         kdf.update(&ss1.0);
         kdf.update(&ss2);
-
+        kdf.update(&enc1.to_bytes());
+        if let Some((_, PublicKey { ref x, .. })) = sender_id_keypair {
+            kdf.update(&x.to_bytes());
+        }
+        kdf.update(&pk_recip.x.to_bytes());
 
         let mut kdfr = kdf.finalize_xof();
         kdfr.read(&mut ss.0);
@@ -289,14 +299,13 @@ impl KemTrait for X25519Kyber768Dilithium {
         ))
     }
 
-    /// Does an X25519-Kyber768 decapsulation. This does not support sender authentication.
-    /// `pk_sender_id` must be `None`. Otherwise, this returns
-    /// [`HpkeError::AuthnotSupportedError`].
     fn decap(
         sk_recip: &Self::PrivateKey,
         pk_sender_id: Option<&Self::PublicKey>,
         encapped_key: &Self::EncappedKey,
     ) -> Result<SharedSecret<Self>, HpkeError> {
+        let pk_recip = Self::sk_to_pk(sk_recip);
+
         // Decapsulate with both KEMs
         let ss1 = X25519HkdfSha256::decap(&sk_recip.x, pk_sender_id.map(|pk| &pk.x), &encapped_key.x)?;
         let ss2 = pqc_kyber::decapsulate(&encapped_key.k, &sk_recip.k)
@@ -305,16 +314,26 @@ impl KemTrait for X25519Kyber768Dilithium {
         let mut ss = <SharedSecret<Self> as Default>::default();
         let mut kc = [0u8; 32];
 
+        let domain_sep = match pk_sender_id {
+            Some(_) => DOMAIN_SEPARATOR_AUTH,
+            None    => DOMAIN_SEPARATOR_NO_AUTH,
+        };
+
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
-        kdf.update(DOMAIN_SEPARATOR.as_bytes());
+        kdf.update(domain_sep.as_bytes());
         kdf.update(&ss1.0);
         kdf.update(&ss2);
+        kdf.update(&encapped_key.x.to_bytes());
+        if let Some(PublicKey { ref x, .. }) = pk_sender_id {
+            kdf.update(&x.to_bytes());
+        }
+        kdf.update(&pk_recip.x.to_bytes());
 
         let mut kdfr = kdf.finalize_xof();
         kdfr.read(&mut ss.0);
         kdfr.read(&mut kc);
 
-        if let Some(pk) = pk_sender_id {
+        if let Some(ref pk) = pk_sender_id {
             let mut sig = encapped_key.d.clone();
 
             let mut buf = [0u8; 1];
