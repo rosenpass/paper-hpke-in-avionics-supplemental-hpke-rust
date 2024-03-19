@@ -22,7 +22,8 @@ type KyberPrivkeyLen = <<typenum::U1000 as core::ops::Add<typenum::U1000>>::Outp
 >>::Output;
 type KyberEncappedKeyLen = <typenum::U1000 as core::ops::Add<typenum::U88>>::Output;
 
-const DOMAIN_SEPARATOR : &str = "Karolin Varner, Wanja Zaeske, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768 + KDF:shake256";
+const DOMAIN_SEPARATOR_AUTH : &str = "Karolin Varner, Wanja Zaeske, Aaron Kaiser, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768  + KDF:shake256: authenticated";
+const DOMAIN_SEPARATOR_NO_AUTH : &str = "Karolin Varner, Wanja Zaeske, Aaron Kaiser, Sven Friedrich, Alice Bowman, August 2023; From paper: Agile post quantum cryptography in avionics; AKEM combiner built from AKEM:HPKE/X25519HkdfSha256 + KEM:Kyber768 + KDF:shake256: no authentication";
 
 // We use GenericArray rather than normal fixed-size arrays because we need serde impls, and serde
 // doesn't support generic constants yet
@@ -218,12 +219,22 @@ impl KemTrait for X25519Kyber768 {
         let (enc2, ss2) =
             pqc_kyber::encapsulate(&pk_recip.k, csprng).map_err(|_| HpkeError::EncapError)?;
 
+        let domain_sep = match sender_id_keypair {
+            Some(_) => DOMAIN_SEPARATOR_AUTH,
+            None    => DOMAIN_SEPARATOR_NO_AUTH,
+        };
         
         let mut ss = <SharedSecret<Self> as Default>::default();
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
-        kdf.update(DOMAIN_SEPARATOR.as_bytes());
+        kdf.update(domain_sep.as_bytes());
         kdf.update(&ss1.0);
         kdf.update(&ss2);
+        kdf.update(&enc1.to_bytes());
+        if let Some((_, PublicKey { ref x, .. })) = sender_id_keypair {
+            kdf.update(&x.to_bytes());
+        }
+        kdf.update(&pk_recip.x.to_bytes());
+
         kdf.finalize_xof().read(&mut ss.0);
 
         // The clone_from_slice, which can panic, is OK because enc2 is a fixed-size array.
@@ -244,18 +255,31 @@ impl KemTrait for X25519Kyber768 {
         pk_sender_id: Option<&Self::PublicKey>,
         encapped_key: &Self::EncappedKey,
     ) -> Result<SharedSecret<Self>, HpkeError> {
+        let pk_recip = Self::sk_to_pk(sk_recip);
+
         // Decapsulate with both KEMs
         let ss1 = X25519HkdfSha256::decap(&sk_recip.x, pk_sender_id.map(|pk| &pk.x), &encapped_key.x)?;
         let ss2 = pqc_kyber::decapsulate(&encapped_key.k, &sk_recip.k)
             .map_err(|_| HpkeError::DecapError)?;
 
+        let domain_sep = match pk_sender_id {
+            Some(_) => DOMAIN_SEPARATOR_AUTH,
+            None    => DOMAIN_SEPARATOR_NO_AUTH,
+        };
+
         // Compute X25519 shared secret || Kyber shared secret. The unwrap() is OK because ss1.0
         // and ss2 are fixed-size arrays.
         let mut ss = <SharedSecret<Self> as Default>::default();
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
-        kdf.update(DOMAIN_SEPARATOR.as_bytes());
+        kdf.update(domain_sep.as_bytes());
         kdf.update(&ss1.0);
         kdf.update(&ss2);
+        kdf.update(&encapped_key.x.to_bytes());
+        if let Some(PublicKey { ref x, .. }) = pk_sender_id {
+            kdf.update(&x.to_bytes());
+        }
+        kdf.update(&pk_recip.x.to_bytes());
+
         kdf.finalize_xof().read(&mut ss.0);
 
         Ok(ss)
