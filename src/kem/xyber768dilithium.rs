@@ -1,3 +1,5 @@
+use core::hint::black_box;
+
 use crate::{
     kdf::{labeled_extract, HkdfSha256, LabeledExpand},
     kem::{Kem as KemTrait, SharedSecret, X25519HkdfSha256},
@@ -15,6 +17,14 @@ use sha3::{Shake256, digest::{Update, ExtendableOutput, XofReader}};
 use pqc_kyber::Keypair as KyberKeypair;
 use rand_core::{CryptoRng, RngCore};
 use subtle::{Choice, ConstantTimeEq};
+
+#[inline]
+pub fn constant_time_xor(dst: &mut [u8], src: &[u8]){
+    assert!(black_box(src.len()) == black_box(dst.len()));
+    for (dv, sv) in dst.iter_mut().zip(src.iter()) {
+        *black_box(dv) ^= black_box(*sv);
+    }
+}
 
 type DilithiumPubkeyLen = <typenum::U1000 as core::ops::Add<typenum::U952>>::Output;
 type DilithiumPrivkeyLen = <<typenum::U2048
@@ -253,7 +263,9 @@ impl KemTrait for X25519Kyber768Dilithium {
             pqc_kyber::encapsulate(&pk_recip.k, csprng).map_err(|_| HpkeError::EncapError)?;
 
         let mut ss = <SharedSecret<Self> as Default>::default();
+        let mut ki = [0u8; 32];
         let mut kc = [0u8; 32];
+        let mut sig_keystream = GenericArray::<u8, DilithiumSignatureLen>::default();
 
         let domain_sep = match sender_id_keypair {
             Some(_) => DOMAIN_SEPARATOR_AUTH,
@@ -262,6 +274,7 @@ impl KemTrait for X25519Kyber768Dilithium {
 
         let mut kdf = Shake256::default(); // TODO: Should be KMAC256 
         kdf.update(domain_sep.as_bytes());
+        kdf.update(&[0u8; 0]);
         kdf.update(&ss1.0);
         kdf.update(&ss2);
         kdf.update(&enc1.to_bytes());
@@ -271,22 +284,29 @@ impl KemTrait for X25519Kyber768Dilithium {
         kdf.update(&pk_recip.x.to_bytes());
 
         let mut kdfr = kdf.finalize_xof();
-        kdfr.read(&mut ss.0);
+        kdfr.read(&mut ki);
         kdfr.read(&mut kc);
+        kdfr.read(&mut sig_keystream);
 
+        // Calculate the signature
         let mut sig = GenericArray::<u8, DilithiumSignatureLen>::default();
         if let Some((sk, _pk)) = sender_id_keypair {
             crystals_dilithium::sign::lvl3::signature(&mut sig, &kc, &sk.d, false);
         }
 
-        // TODO: Constant time
-        // TODO: Implementing our own stream cipher here saves us 16 bytes…is that worth
-        // implementing a stream cipher?
-        let mut buf = [0u8; 1];
-        for i in 0..DilithiumSignatureLen::to_usize() {
-            kdfr.read(&mut buf);
-            sig[i] ^= buf[0];
-        }
+        // Encrypt the signature
+        constant_time_xor(&mut sig, sig_keystream.as_slice());
+        let sig_ct = sig;
+
+        // Second stage of key derivation so we can mix the signature into the output key
+        let mut kdf = Shake256::default();
+        kdf.update(domain_sep.as_bytes());
+        kdf.update(&[0u8; 1]);
+        kdf.update(&ki);
+        kdf.update(sig_ct.as_slice());
+
+        let mut kdfr = kdf.finalize_xof();
+        kdfr.read(&mut ss.0);
 
         // The clone_from_slice, which can panic, is OK because enc2 is a fixed-size array.
         Ok((
@@ -294,7 +314,7 @@ impl KemTrait for X25519Kyber768Dilithium {
             EncappedKey {
                 x: enc1,
                 k: GenericArray::clone_from_slice(&enc2),
-                d: GenericArray::clone_from_slice(&sig),
+                d: GenericArray::clone_from_slice(&sig_ct),
             },
         ))
     }
@@ -312,7 +332,9 @@ impl KemTrait for X25519Kyber768Dilithium {
             .map_err(|_| HpkeError::DecapError)?;
 
         let mut ss = <SharedSecret<Self> as Default>::default();
+        let mut ki = [0u8; 32];
         let mut kc = [0u8; 32];
+        let mut sig_keystream = GenericArray::<u8, DilithiumSignatureLen>::default();
 
         let domain_sep = match pk_sender_id {
             Some(_) => DOMAIN_SEPARATOR_AUTH,
@@ -330,22 +352,30 @@ impl KemTrait for X25519Kyber768Dilithium {
         kdf.update(&pk_recip.x.to_bytes());
 
         let mut kdfr = kdf.finalize_xof();
-        kdfr.read(&mut ss.0);
+        kdfr.read(&mut ki);
         kdfr.read(&mut kc);
+        kdfr.read(&mut sig_keystream);
 
+        // Decrypt the signature
+        let mut sig = encapped_key.d.clone();
+        constant_time_xor(&mut sig, sig_keystream.as_slice());
+
+        // Perform the signature check
         if let Some(ref pk) = pk_sender_id {
-            let mut sig = encapped_key.d.clone();
-
-            let mut buf = [0u8; 1];
-            for i in 0..DilithiumSignatureLen::to_usize() {
-                kdfr.read(&mut buf);
-                sig[i] ^= buf[0];
-            }
-
             if !crystals_dilithium::sign::lvl3::verify(&sig, &kc, &pk.d) {
                 return Err(HpkeError::DecapError);
             }
         }
+
+        // Second stage of key derivation so we can mix the signature into the output key
+        let mut kdf = Shake256::default();
+        kdf.update(domain_sep.as_bytes());
+        kdf.update(&[0u8; 1]);
+        kdf.update(&ki);
+        kdf.update(&encapped_key.d); // sig_ct
+
+        let mut kdfr = kdf.finalize_xof();
+        kdfr.read(&mut ss.0);
 
         Ok(ss)
     }
