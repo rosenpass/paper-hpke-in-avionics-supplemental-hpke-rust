@@ -16,14 +16,14 @@ mod dhkem;
 pub use dhkem::*;
 
 #[cfg(feature = "paper_hpke_in_avionics")]
-pub mod paper_hpke_in_avionics;
+pub mod xyber768;
 #[cfg(feature = "paper_hpke_in_avionics")]
-pub use paper_hpke_in_avionics::*;
+pub use xyber768::*;
 
 #[cfg(feature = "paper_hpke_in_avionics")]
-pub mod paper_hpke_in_avionics;
+pub mod xyber768dilithium;
 #[cfg(feature = "paper_hpke_in_avionics")]
-pub use paper_hpke_in_avionics::*;
+pub use xyber768dilithium::*;
 
 /// Represents authenticated encryption functionality
 pub trait Kem: Sized { /// The key exchange's public key type. If you want to generate a keypair, see
