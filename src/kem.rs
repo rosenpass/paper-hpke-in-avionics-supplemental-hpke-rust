@@ -1,5 +1,9 @@
 //! Traits and structs for key encapsulation mechanisms
 
+// We allow ambiguous ::* exports because every KEM exports a doc(hidden) type called EncappedKey.
+// The user never sees it, but the compiler still thinks it's ambiguous.
+#![allow(ambiguous_glob_reexports)]
+
 use crate::{Deserializable, HpkeError, Serializable};
 
 use core::fmt::Debug;
@@ -11,9 +15,18 @@ use zeroize::Zeroize;
 mod dhkem;
 pub use dhkem::*;
 
+#[cfg(feature = "xyber768")]
+pub mod xyber768;
+#[cfg(feature = "xyber768")]
+pub use xyber768::*;
+
+#[cfg(feature = "xyber768dilithium")]
+pub mod xyber768dilithium;
+#[cfg(feature = "xyber768dilithium")]
+pub use xyber768dilithium::*;
+
 /// Represents authenticated encryption functionality
-pub trait Kem: Sized {
-    /// The key exchange's public key type. If you want to generate a keypair, see
+pub trait Kem: Sized { /// The key exchange's public key type. If you want to generate a keypair, see
     /// `Kem::gen_keypair` or `Kem::derive_keypair`
     type PublicKey: Clone + Debug + PartialEq + Eq + Serializable + Deserializable;
 
