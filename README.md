@@ -1,6 +1,8 @@
 # TESTING
 
-This is a testing branch for [draft v2](https://www.ietf.org/archive/id/draft-westerbaan-cfrg-hpke-xyber768d00-02.html) of an HPKE _hybrid post-quantum_ ciphersuite. In short, this ciphersuite, X25519Kyber768Draft00, does both X25519 and [Kyber](https://pq-crystals.org/kyber/) encapsulation/decapsulation, and uses _both_ shared secrets to establish a secure session. This construction is secure so long as at least one of its components, X25519 or Kyber, is secure.
+This fork of the rust-hpke project is supplemental material for the paper [Agile, Post-quantum Secure Cryptography in Avionics](https://eprint.iacr.org/2024/667).
+
+See the [parent repository](https://github.com/rosenpass/paper-hpke-in-avionics-supplemental) to compile this or to reproduce the benchmarks.
 
 **Do NOT use this branch for anything other than testing**
 

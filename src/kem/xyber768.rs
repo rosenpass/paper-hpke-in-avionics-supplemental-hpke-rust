@@ -54,11 +54,8 @@ pub struct EncappedKey {
     k: GenericArray<u8, KyberEncappedKeyLen>,
 }
 
-// X25519Kyber768Draft00 v2 §5: Nenc of X25519Kyber768Draft00 is 1120
 type XyberEncappedKeyLen = <typenum::U1000 as core::ops::Add<typenum::U120>>::Output;
-// X25519Kyber768Draft00 v2 §5: Npk of X25519Kyber768Draft00 is 1216
 type XyberPubkeyLen = <typenum::U1000 as core::ops::Add<typenum::U216>>::Output;
-// X25519Kyber768Draft00 v2 §5: Nsk of X25519Kyber768Draft00 is 2432
 type XyberPrivkeyLen = <<typenum::U1000 as core::ops::Add<typenum::U1000>>::Output as core::ops::Add<
     typenum::U432,
 >>::Output;
@@ -194,7 +191,6 @@ impl Eq for PrivateKey {}
 pub struct X25519Kyber768;
 
 impl KemTrait for X25519Kyber768 {
-    // X25519Kyber768Draft00 v2 §5: Nsecret of X25519Kyber768Draft00 is 64
     #[doc(hidden)]
     type NSecret = typenum::U64;
 

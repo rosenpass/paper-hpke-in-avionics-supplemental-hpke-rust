@@ -422,41 +422,38 @@ mod test {
         );
     }
 
-    #[cfg(feature = "xyber768")]
-    mod xyber768d00_tests {
+    #[cfg(feature = "paper_hpke_in_avionics")]
+    mod paper_hpke_in_avionics_tests {
         use super::*;
 
         test_setup_correctness!(
-            test_setup_correctness_xyber768,
+            test_setup_correctness_paper_hpke_in_avionics,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768::X25519Kyber768,
+            crate::kem::paper_hpke_in_avionics::X25519Kyber768,
             true
         );
         test_setup_soundness!(
-            test_setup_soundness_xyber768,
+            test_setup_soundness_paper_hpke_in_avionics,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768::X25519Kyber768
+            crate::kem::paper_hpke_in_avionics::X25519Kyber768
         );
-    }
 
-    #[cfg(feature = "xyber768dilithium")]
-    mod xyber768dilithium_tests {
         use super::*;
 
         test_setup_correctness!(
-            test_setup_correctness_xyber768dilithium,
+            test_setup_correctness_paper_hpke_in_avionics,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768dilithium::X25519Kyber768Dilithium,
+            crate::kem::paper_hpke_in_avionics::X25519Kyber768Dilithium,
             true
         );
         test_setup_soundness!(
-            test_setup_soundness_xyber768,
+            test_setup_soundness_paper_hpke_in_avionics,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber768dilithium::X25519Kyber768Dilithium
+            crate::kem::paper_hpke_in_avionics::X25519Kyber768Dilithium
         );
     }
 }

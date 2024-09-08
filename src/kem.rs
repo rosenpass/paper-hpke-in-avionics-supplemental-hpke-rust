@@ -15,15 +15,15 @@ use zeroize::Zeroize;
 mod dhkem;
 pub use dhkem::*;
 
-#[cfg(feature = "xyber768")]
-pub mod xyber768;
-#[cfg(feature = "xyber768")]
-pub use xyber768::*;
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub mod paper_hpke_in_avionics;
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub use paper_hpke_in_avionics::*;
 
-#[cfg(feature = "xyber768dilithium")]
-pub mod xyber768dilithium;
-#[cfg(feature = "xyber768dilithium")]
-pub use xyber768dilithium::*;
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub mod paper_hpke_in_avionics;
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub use paper_hpke_in_avionics::*;
 
 /// Represents authenticated encryption functionality
 pub trait Kem: Sized { /// The key exchange's public key type. If you want to generate a keypair, see

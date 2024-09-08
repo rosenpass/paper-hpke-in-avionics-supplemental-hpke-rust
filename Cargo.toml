@@ -15,15 +15,12 @@ categories = ["cryptography", "no-std"]
 # "p256" enables the use of ECDH-NIST-P256 as a KEM
 # "p384" enables the use of ECDH-NIST-P384 as a KEM
 # "x25519" enables the use of the X25519 as a KEM
-# "xyber768" enables the use of X25519Kyber768 as a KEM
-# "xyber768" enables the use of X25519Kyber768dilithium as a KEM
-default = ["alloc", "p256", "x25519", "xyber768", "xyber768dilithium"]
+default = ["alloc", "p256", "x25519", "paper_hpke_in_avionics"]
 x25519 = ["dep:x25519-dalek"]
 p384 = ["dep:p384"]
 p256 = ["dep:p256"]
 p521 = ["dep:p521"]
-xyber768 = ["dep:pqc_kyber", "dep:sha3", "x25519"]
-xyber768dilithium = ["dep:pqc_kyber", "dep:sha3", "dep:crystals-dilithium", "x25519"]
+paper_hpke_in_avionics = ["dep:pqc_kyber", "dep:sha3", "dep:crystals-dilithium", "x25519"]
 # Include allocating methods like open() and seal()
 alloc = []
 # Includes an implementation of `std::error::Error` for `HpkeError`. Also does what `alloc` does.
