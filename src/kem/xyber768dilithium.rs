@@ -1,4 +1,4 @@
-use core::hint::black_box;
+use core::{hint::black_box, ops::Deref};
 
 use crate::{
     kdf::{labeled_extract, HkdfSha256, LabeledExpand},
@@ -381,8 +381,6 @@ impl KemTrait for X25519Kyber768Dilithium {
         pk_sender_id: Option<&Self::PublicKey>,
         encapped_key: &Self::EncappedKey,
     ) -> Result<SharedSecret<Self>, HpkeError> {
-        let pk_recip = Self::sk_to_pk(sk_recip);
-
         // Decapsulate with both KEMs
         let ss1 = X25519HkdfSha256::decap(&sk_recip.x, pk_sender_id.map(|pk| &pk.x), &encapped_key.x)?;
         let ss2 = pqc_kyber::decapsulate(&encapped_key.k, &sk_recip.k)
@@ -406,7 +404,7 @@ impl KemTrait for X25519Kyber768Dilithium {
         if let Some(PublicKey { ref x, .. }) = pk_sender_id {
             kdf.update(&x.to_bytes());
         }
-        kdf.update(&pk_recip.x.to_bytes());
+        kdf.update(X25519HkdfSha256::sk_to_pk(&sk_recip.x).to_bytes().deref());
 
         let mut kdfr = kdf.finalize_xof();
         kdfr.read(&mut ki);
