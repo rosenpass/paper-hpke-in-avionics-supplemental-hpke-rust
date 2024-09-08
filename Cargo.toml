@@ -20,7 +20,7 @@ x25519 = ["dep:x25519-dalek"]
 p384 = ["dep:p384"]
 p256 = ["dep:p256"]
 p521 = ["dep:p521"]
-paper_hpke_in_avionics = ["dep:pqc_kyber", "dep:sha3", "dep:crystals-dilithium", "dep:oqs-sys", "x25519"]
+paper_hpke_in_avionics = ["dep:pqc_kyber", "dep:pqc_kyber_1024", "dep:x448", "dep:sha3", "dep:crystals-dilithium", "dep:oqs-sys", "x25519"]
 # Include allocating methods like open() and seal()
 alloc = []
 # Includes an implementation of `std::error::Error` for `HpkeError`. Also does what `alloc` does.
@@ -46,6 +46,7 @@ zeroize = { version = "1", default-features = false, features = ["zeroize_derive
 crystals-dilithium = { version = "1.0.0", optional = true }
 sha3 = { version = "0.10.8", optional = true }
 oqs-sys = { path = "../liboqs-rust/oqs-sys", optional = true, features = ["ml_kem", "ml_dsa"]}
+x448 = { version = "0.6.0", optional = true }
 
 [dependencies.pqc_kyber]
 # Be careful when switching to upstream, as the latest version might not have
@@ -60,6 +61,13 @@ git = "https://github.com/bwesterb/argyle-kyber"
 package = "safe_pqc_kyber"
 default-features = false
 features = ["kyber768", "std"] # TODO get rid of std dep
+optional = true
+
+[dependencies.pqc_kyber_1024]
+path = "../argyle-kyber/"
+package = "safe_pqc_kyber"
+default-features = false
+features = ["kyber1024", "std"] # TODO get rid of std dep
 optional = true
 
 [dev-dependencies]

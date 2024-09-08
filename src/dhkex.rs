@@ -49,3 +49,6 @@ pub(crate) mod ecdh_nistp;
 
 #[cfg(feature = "x25519")]
 pub(crate) mod x25519;
+
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub(crate) mod x448;
