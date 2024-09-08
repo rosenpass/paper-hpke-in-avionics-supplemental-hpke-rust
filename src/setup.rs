@@ -459,4 +459,42 @@ mod test {
             crate::kem::xyber768dilithium::X25519Kyber768Dilithium
         );
     }
+
+    #[cfg(feature = "paper_hpke_in_avionics")]
+    mod xyber768_oqs_tests {
+        use super::*;
+
+        test_setup_correctness!(
+            test_setup_correctness_xyber768_oqs,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber768_oqs::X25519Kyber768,
+            true
+        );
+        test_setup_soundness!(
+            test_setup_soundness_xyber768_oqs,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber768_oqs::X25519Kyber768
+        );
+    }
+
+    #[cfg(feature = "paper_hpke_in_avionics")]
+    mod xyber768dilithium_oqs_tests {
+        use super::*;
+
+        test_setup_correctness!(
+            test_setup_correctness_xyber768dilithium_oqs,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber768dilithium_oqs::X25519Kyber768Dilithium,
+            true
+        );
+        test_setup_soundness!(
+            test_setup_soundness_xyber768dilithium_oqs,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber768dilithium_oqs::X25519Kyber768Dilithium
+        );
+    }
 }

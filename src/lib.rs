@@ -119,6 +119,9 @@ pub use rand_core;
 #[macro_use]
 mod util;
 
+#[cfg(feature = "paper_hpke_in_avionics")]
+mod oqs;
+
 pub mod aead;
 mod dhkex;
 pub mod kdf;

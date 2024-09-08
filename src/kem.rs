@@ -25,6 +25,12 @@ pub mod xyber768dilithium;
 #[cfg(feature = "paper_hpke_in_avionics")]
 pub use xyber768dilithium::*;
 
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub mod xyber768_oqs;
+
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub mod xyber768dilithium_oqs;
+
 /// Represents authenticated encryption functionality
 pub trait Kem: Sized { /// The key exchange's public key type. If you want to generate a keypair, see
     /// `Kem::gen_keypair` or `Kem::derive_keypair`
