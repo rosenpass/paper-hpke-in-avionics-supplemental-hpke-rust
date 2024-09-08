@@ -4,7 +4,7 @@ This fork of the rust-hpke project is supplemental material for the paper [Agile
 
 See the [parent repository](https://github.com/rosenpass/paper-hpke-in-avionics-supplemental) to compile this or to reproduce the benchmarks.
 
-**Do NOT use this branch for anything other than testing**
+**Do NOT use this fork for anything other than testing**
 
 rust-hpke
 =========
