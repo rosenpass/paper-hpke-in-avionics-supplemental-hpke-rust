@@ -6,6 +6,23 @@ See the [parent repository](https://github.com/rosenpass/paper-hpke-in-avionics-
 
 **Do NOT use this fork for anything other than testing**
 
+See the directory src/kem/ for our KEM implementations
+
+- xyber768 - Basic variant of our combiner with post-quantum secrecy and pre-quantum authentication
+- xyber768dilithium - Variant of our combiner with post-quantum secrecy AND post-quantum authentication
+- xyber1024dilithium – Variant of our combiner with extra security (NIST level 5 KEMs and Signatures, x448 instead of x25519 for pre-quantum security)
+
+Our initial submission used pure rust implementations of Kyber and Dilithium. These did not seem very trustworthy, so we decided to use
+up-to-date implementations of ML-KEM and ML-DSA for liboqs, so there are now two variants. ML-KEM/ML-DSA are the names given to Kyber/Dilithium
+after standardization through NIST. In order to be able to understand any performance impact of this change, we kept both variants around.
+
+- *plain variants* – I.e. those without _oqs.rs are using less trustworthy pure rust implementations of the combiner
+- *_oqs variants* – These with the suffix `_oqs.rs` are our updated implementations using liboqs
+
+Finally, we also added a fairly ad-hoc implementation of `DHKEM(X448, HKDF-SHA-512)` (see src/dhkex/x448.rs) to support `xyber1024dilithium`.
+This algorithm is standardized as part of [HPKE - rfc9189](https://datatracker.ietf.org/doc/rfc9180/) but our implementation was written with
+minimal effort. The only sensible use for this particular implementation is benchmarking.
+
 rust-hpke
 =========
 [![Version](https://img.shields.io/crates/v/hpke.svg)](https://crates.io/crates/hpke)
