@@ -363,6 +363,26 @@ mod test {
         );
     }
 
+    #[cfg(feature = "paper_hpke_in_avionics")]
+    mod x448_tests {
+        use super::*;
+        use crate::kdf::HkdfSha512;
+
+        test_setup_correctness!(
+            test_setup_correctness_x448,
+            ChaCha20Poly1305,
+            HkdfSha512,
+            crate::kem::x448_hkdfsha512::X448HkdfSha512,
+            true
+        );
+        test_setup_soundness!(
+            test_setup_soundness_x448,
+            ChaCha20Poly1305,
+            HkdfSha512,
+            crate::kem::x448_hkdfsha512::X448HkdfSha512
+        );
+    }
+
     #[cfg(feature = "p256")]
     mod p256_tests {
         use super::*;
@@ -468,14 +488,14 @@ mod test {
             test_setup_correctness_xyber1024dilithium,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber1024dilithium::X25519Kyber1024Dilithium,
+            crate::kem::xyber1024dilithium::X448Kyber1024Dilithium,
             true
         );
         test_setup_soundness!(
             test_setup_soundness_xyber1024,
             ChaCha20Poly1305,
             HkdfSha256,
-            crate::kem::xyber1024dilithium::X25519Kyber1024Dilithium
+            crate::kem::xyber1024dilithium::X448Kyber1024Dilithium
         );
     }
 
