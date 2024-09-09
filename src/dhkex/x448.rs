@@ -1,3 +1,5 @@
+use core::borrow::Borrow;
+
 use crate::{
     dhkex::{DhError, DhKeyExchange},
     kdf::{labeled_extract, Kdf as KdfTrait, LabeledExpand},
@@ -7,22 +9,74 @@ use crate::{
 
 use generic_array::typenum::{self, Unsigned};
 use subtle::{Choice, ConstantTimeEq};
+use zeroize::ZeroizeOnDrop;
 
-// We wrap the types in order to abstract away the dalek dep
+const X448_POINT_LEN : usize = 56;
+type X448PointLen = typenum::U56;
+type X448Point = [u8; X448_POINT_LEN];
+const X448_ZERO_POINT : X448Point = [0u8; X448_POINT_LEN];
 
-/// An X25519 public key
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PublicKey(x25519_dalek::PublicKey);
+/// An X448 public key
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PublicKey(X448Point);
 
-// The underlying type is zeroize-on-drop
-/// An X25519 private key
-#[derive(Clone)]
-pub struct PrivateKey(x25519_dalek::StaticSecret);
+impl PublicKey {
+    #[allow(dead_code)]
+    fn from_bytes(bytes: X448Point) -> Option<Self> {
+        x448::PublicKey::from_bytes(&bytes).and_then(Self::from_x448_crate)
+    }
+
+    fn from_x448_crate(inner: x448::PublicKey) -> Option<Self> {
+        Self(*inner.as_bytes()).check_nonzero()
+    }
+
+    fn empower(&self) -> x448::PublicKey {
+        x448::PublicKey::from_bytes(&self.0).unwrap()
+    }
+
+    fn check_nonzero(self) -> Option<Self> {
+        let nonzero : bool = self.0.ct_ne(&X448_ZERO_POINT).into();
+        nonzero.then_some(self)
+    }
+}
+
+/// An X448 private key
+#[derive(Clone, ZeroizeOnDrop)]
+pub struct PrivateKey(X448Point);
+
+impl PrivateKey {
+    fn from_bytes(bytes: X448Point) -> Option<Self> {
+        x448::Secret::from_bytes(&bytes).and_then(Self::from_x448_crate)
+    }
+
+    fn from_x448_crate(inner: x448::Secret) -> Option<Self> {
+        Self(*inner.as_bytes()).check_nonzero()
+    }
+
+    fn empower(&self) -> x448::Secret {
+        x448::Secret::from_bytes(&self.0).unwrap()
+    }
+
+    fn check_nonzero(self) -> Option<Self> {
+        let nonzero : bool = self.0.ct_ne(&X448_ZERO_POINT).into();
+        nonzero.then_some(self)
+    }
+
+    fn pk(&self) -> PublicKey {
+        let pk : x448::PublicKey = self.empower().borrow().into();
+        PublicKey::from_x448_crate(pk).unwrap()
+    }
+
+    fn dh(&self, pk: &PublicKey) -> Option<KexResult> {
+        self.empower()
+            .as_diffie_hellman(pk.empower().borrow())
+            .and_then(KexResult::from_x448_crate)
+    }
+}
 
 impl ConstantTimeEq for PrivateKey {
     fn ct_eq(&self, other: &Self) -> Choice {
-        // We can use to_bytes because StaticSecret is only ever constructed from a clamped scalar
-        self.0.to_bytes().ct_eq(&other.0.to_bytes())
+        self.0.ct_eq(&other.0)
     }
 }
 
@@ -35,46 +89,78 @@ impl Eq for PrivateKey {}
 
 // The underlying type is zeroize-on-drop
 /// A bare DH computation result
-pub struct KexResult(x25519_dalek::SharedSecret);
+pub struct KexResult(X448Point);
+
+impl KexResult {
+    #[allow(dead_code)]
+    fn from_bytes(bytes: X448Point) -> Option<Self> {
+        x448::SharedSecret::from_bytes(&bytes).and_then(Self::from_x448_crate)
+    }
+
+    fn from_x448_crate(inner: x448::SharedSecret) -> Option<Self> {
+        Self(*inner.as_bytes()).check_nonzero()
+    }
+
+    #[allow(dead_code)]
+    fn empower(&self) -> x448::SharedSecret {
+        x448::PublicKey::from_bytes(&self.0).unwrap()
+    }
+
+    fn check_nonzero(self) -> Option<Self> {
+        let nonzero : bool = self.0.ct_ne(&X448_ZERO_POINT).into();
+        nonzero.then_some(self)
+    }
+}
+
+impl ConstantTimeEq for KexResult {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
+
+impl PartialEq for KexResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for KexResult {}
 
 // Oh I love an excuse to break out type-level integers
 impl Serializable for PublicKey {
-    // RFC 9180 §7.1 Table 2: Npk of DHKEM(X25519, HKDF-SHA256) is 32
-    type OutputSize = typenum::U32;
+    type OutputSize = X448PointLen;
 
     // Dalek lets us convert pubkeys to [u8; 32]
     fn write_exact(&self, buf: &mut [u8]) {
         // Check the length is correct and panic if not
         enforce_outbuf_len::<Self>(buf);
 
-        buf.copy_from_slice(self.0.as_bytes());
+        buf.copy_from_slice(&self.0);
     }
 }
 
 impl Deserializable for PublicKey {
-    // Dalek lets us convert [u8; 32] to pubkeys. Assuming the input length is correct, this
-    // conversion is infallible, so no ValidationErrors are raised.
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         // Pubkeys must be 32 bytes
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
         // Copy to a fixed-size array
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(encoded);
-        Ok(PublicKey(x25519_dalek::PublicKey::from(arr)))
+        let pk = x448::PublicKey::from_bytes(encoded)
+            .ok_or(HpkeError::ValidationError)?;
+        Ok(PublicKey(*pk.as_bytes()))
     }
 }
 
 impl Serializable for PrivateKey {
-    // RFC 9180 §7.1 Table 2: Nsk of DHKEM(X25519, HKDF-SHA256) is 32
-    type OutputSize = typenum::U32;
+    // RFC 9180 §7.1 Table 2: Nsk of DHKEM(X448, HKDF-SHA512) is 32
+    type OutputSize = X448PointLen;
 
     // Dalek lets us convert scalars to [u8; 32]
     fn write_exact(&self, buf: &mut [u8]) {
         // Check the length is correct and panic if not
         enforce_outbuf_len::<Self>(buf);
 
-        buf.copy_from_slice(self.0.as_bytes());
+        buf.copy_from_slice(&self.0);
     }
 }
 impl Deserializable for PrivateKey {
@@ -85,24 +171,14 @@ impl Deserializable for PrivateKey {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
         // Copy to a fixed-size array
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(encoded);
-        // We don't have to do a zero-check for X25519 private keys. We clamp all private keys upon
-        // deserialization, and clamped private keys cannot ever be 0 mod curve_order. In fact,
-        // they can't even be 0 mod q where q is the order of the prime subgroup generated by the
-        // canonical generator.
-        // Why?
-        // A clamped key k is of the form 2^254 + 8j where j is in [0, 2^251-1]. If k = 0 (mod q)
-        // then k = nq for some n > 0. And since k is a multiple of 8 and q is prime, n must be a
-        // multiple of 8. However, 8q > 2^257 which is already out of representable range! So k
-        // cannot be 0 (mod q).
-        Ok(PrivateKey(x25519_dalek::StaticSecret::from(arr)))
+        let sk = x448::Secret::from_bytes(encoded)
+            .ok_or(HpkeError::ValidationError)?;
+        Ok(PrivateKey(*sk.as_bytes()))
     }
 }
 
 impl Serializable for KexResult {
-    // RFC 9180 §4.1: For X25519 and X448, the size Ndh is equal to 32 and 56, respectively
-    type OutputSize = typenum::U32;
+    type OutputSize = X448PointLen;
 
     // curve25519's point representation is our DH result. We don't have to do anything special.
     fn write_exact(&self, buf: &mut [u8]) {
@@ -110,14 +186,14 @@ impl Serializable for KexResult {
         enforce_outbuf_len::<Self>(buf);
 
         // Dalek lets us convert shared secrets to to [u8; 32]
-        buf.copy_from_slice(self.0.as_bytes());
+        buf.copy_from_slice(&self.0);
     }
 }
 
-/// Represents ECDH functionality over the X25519 group
-pub struct X25519 {}
+/// Represents ECDH functionality over the X448 group
+pub struct X448 {}
 
-impl DhKeyExchange for X25519 {
+impl DhKeyExchange for X448 {
     #[doc(hidden)]
     type PublicKey = PublicKey;
     #[doc(hidden)]
@@ -125,10 +201,10 @@ impl DhKeyExchange for X25519 {
     #[doc(hidden)]
     type KexResult = KexResult;
 
-    /// Converts an X25519 private key to a public key
+    /// Converts an X448 private key to a public key
     #[doc(hidden)]
     fn sk_to_pk(sk: &PrivateKey) -> PublicKey {
-        PublicKey(x25519_dalek::PublicKey::from(&sk.0))
+        sk.pk()
     }
 
     /// Does the DH operation. Returns an error if and only if the DH result was all zeros. This is
@@ -136,14 +212,7 @@ impl DhKeyExchange for X25519 {
     /// by the caller, i.e., `HpkeError::EncapError` or `HpkeError::DecapError`.
     #[doc(hidden)]
     fn dh(sk: &PrivateKey, pk: &PublicKey) -> Result<KexResult, DhError> {
-        let res = sk.0.diffie_hellman(&pk.0);
-        // "Senders and recipients MUST check whether the shared secret is the all-zero value
-        // and abort if so"
-        if res.as_bytes().ct_eq(&[0u8; 32]).into() {
-            Err(DhError)
-        } else {
-            Ok(KexResult(res))
-        }
+        sk.dh(pk).ok_or(DhError)
     }
 
     // RFC 9180 §7.1.3
@@ -160,22 +229,22 @@ impl DhKeyExchange for X25519 {
         // Write the label into a byte buffer and extract from the IKM
         let (_, hkdf_ctx) = labeled_extract::<Kdf>(&[], suite_id, b"dkp_prk", ikm);
         // The buffer we hold the candidate scalar bytes in. This is the size of a private key.
-        let mut buf = [0u8; 32];
+        let mut buf = [0u8; 56];
         hkdf_ctx
             .labeled_expand(suite_id, b"sk", &[], &mut buf)
             .unwrap();
 
-        let sk = x25519_dalek::StaticSecret::from(buf);
-        let pk = x25519_dalek::PublicKey::from(&sk);
+        let sk = PrivateKey::from_bytes(buf).unwrap();
+        let pk = sk.pk();
 
-        (PrivateKey(sk), PublicKey(pk))
+        (sk, pk)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        dhkex::{x25519::X25519, Deserializable, DhKeyExchange, Serializable},
+        dhkex::{x448::X448, DhKeyExchange, Serializable},
         test_util::dhkex_gen_keypair,
     };
     use generic_array::typenum::Unsigned;
@@ -184,7 +253,7 @@ mod tests {
     /// Tests that an serialize-deserialize round-trip ends up at the same pubkey
     #[test]
     fn test_pubkey_serialize_correctness() {
-        type Kex = X25519;
+        type Kex = X448;
 
         let mut csprng = StdRng::from_entropy();
 
@@ -198,7 +267,7 @@ mod tests {
 
         // Make a pubkey with those random bytes. Note, that from_bytes() does not clamp the input
         // bytes. This is why this test passes.
-        let pk = <Kex as DhKeyExchange>::PublicKey::from_bytes(&orig_bytes).unwrap();
+        let pk = <Kex as DhKeyExchange>::PublicKey::from_bytes(orig_bytes).unwrap();
         let pk_bytes = pk.to_bytes();
 
         // See if the re-serialized bytes are the same as the input
@@ -208,7 +277,7 @@ mod tests {
     /// Tests that an deserialize-serialize round trip on a DH keypair ends up at the same values
     #[test]
     fn test_dh_serialize_correctness() {
-        type Kex = X25519;
+        type Kex = X448;
 
         let mut csprng = StdRng::from_entropy();
 
@@ -217,8 +286,8 @@ mod tests {
         let (sk_bytes, pk_bytes) = (sk.to_bytes(), pk.to_bytes());
 
         // Now deserialize those bytes
-        let new_sk = <Kex as DhKeyExchange>::PrivateKey::from_bytes(&sk_bytes).unwrap();
-        let new_pk = <Kex as DhKeyExchange>::PublicKey::from_bytes(&pk_bytes).unwrap();
+        let new_sk = <Kex as DhKeyExchange>::PrivateKey::from_bytes(sk_bytes.into()).unwrap();
+        let new_pk = <Kex as DhKeyExchange>::PublicKey::from_bytes(pk_bytes.into()).unwrap();
 
         // See if the deserialized values are the same as the initial ones
         assert!(new_sk == sk, "private key doesn't serialize correctly");

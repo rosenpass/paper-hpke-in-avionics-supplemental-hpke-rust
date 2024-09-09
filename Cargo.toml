@@ -4,7 +4,7 @@ repository = "https://github.com/rozbb/rust-hpke"
 documentation = "https://docs.rs/rust-hpke"
 description = "An implementation of the HPKE hybrid encryption standard (RFC 9180) in pure Rust"
 readme = "README.md"
-version = "0.10.0"
+version = "0.12.0"
 authors = ["Michael Rosenberg <michael@mrosenberg.pub>"]
 edition = "2021"
 license = "MIT/Apache-2.0"
@@ -15,16 +15,12 @@ categories = ["cryptography", "no-std"]
 # "p256" enables the use of ECDH-NIST-P256 as a KEM
 # "p384" enables the use of ECDH-NIST-P384 as a KEM
 # "x25519" enables the use of the X25519 as a KEM
-# "xyber768" enables the use of X25519Kyber768 as a KEM
-# "xyber768" enables the use of X25519Kyber768dilithium as a KEM
-default = ["alloc", "p256", "x25519"]
+default = ["alloc", "p256", "x25519", "paper_hpke_in_avionics"]
 x25519 = ["dep:x25519-dalek"]
 p384 = ["dep:p384"]
 p256 = ["dep:p256"]
-xyber768 = ["dep:pqc_kyber", "dep:sha3", "x25519"]
-xyber768dilithium = ["dep:pqc_kyber", "dep:sha3", "dep:crystals-dilithium", "x25519"]
-# Include serde Serialize/Deserialize impls for all relevant types
-serde_impls = ["dep:serde", "generic-array/serde"]
+p521 = ["dep:p521"]
+paper_hpke_in_avionics = ["dep:pqc_kyber", "dep:pqc_kyber_1024", "dep:x448", "dep:sha3", "dep:crystals-dilithium", "dep:oqs-sys", "x25519"]
 # Include allocating methods like open() and seal()
 alloc = []
 # Includes an implementation of `std::error::Error` for `HpkeError`. Also does what `alloc` does.
@@ -33,7 +29,6 @@ std = []
 [dependencies]
 aead = "0.5"
 aes-gcm = "0.10"
-byteorder = { version = "1.4", default-features = false }
 chacha20poly1305 = "0.10"
 generic-array = { version = "0.14", default-features = false }
 digest = "0.10"
@@ -42,18 +37,16 @@ hmac = "0.12"
 rand_core = { version = "0.6", default-features = false }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdh"], optional = true}
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdh"], optional = true}
+p521 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdh"], optional = true}
 sha2 = { version = "0.10", default-features = false }
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"], optional = true }
 serde = { version = "1.0", default-features = false, optional = true, features = ["derive"] }
-subtle = { version = "2.4", default-features = false }
+subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
 crystals-dilithium = { version = "1.0.0", optional = true }
 sha3 = { version = "0.10.8", optional = true }
-
-[dependencies.x25519-dalek]
-version = "2.0.0-pre.1"
-default-features = false
-features = ["u64_backend"]
-optional = true
+oqs-sys = { path = "../liboqs-rust/oqs-sys", optional = true, features = ["ml_kem", "ml_dsa"]}
+x448 = { version = "0.6.0", optional = true }
 
 [dependencies.pqc_kyber]
 # Be careful when switching to upstream, as the latest version might not have
@@ -70,6 +63,13 @@ default-features = false
 features = ["kyber768", "std"] # TODO get rid of std dep
 optional = true
 
+[dependencies.pqc_kyber_1024]
+path = "../argyle-kyber/"
+package = "safe_pqc_kyber"
+default-features = false
+features = ["kyber1024", "std"] # TODO get rid of std dep
+optional = true
+
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
 hex = "0.4"
@@ -84,7 +84,7 @@ required-features = ["x25519"]
 
 [[example]]
 name = "agility"
-required-features = ["p256", "p384", "x25519"]
+required-features = ["p256", "p384", "p521", "x25519"]
 
 # Tell docs.rs to build docs with `--all-features` and `--cfg docsrs` (for nightly docs features)
 [package.metadata.docs.rs]

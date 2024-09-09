@@ -2,9 +2,6 @@ use crate::{kdf::Kdf as KdfTrait, util::KemSuiteId, Deserializable, Serializable
 
 use core::fmt::Debug;
 
-#[cfg(feature = "serde_impls")]
-use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
-
 // This is the maximum value of all of Npk, Ndh, and Nenc. It's achieved by P-521 in RFC 9180 §7.1
 // Table 2.
 pub(crate) const MAX_PUBKEY_SIZE: usize = 133;
@@ -18,37 +15,12 @@ pub struct DhError;
 /// way to generate keypairs, perform the Diffie-Hellman operation, and serialize/deserialize
 /// pubkeys. This is built into a KEM in `kem/dhkem.rs`.
 pub trait DhKeyExchange {
-    // Public and private keys need to implement serde::{Serialize, Deserialize} if the serde_impls
-    // feature is set. So double up all the definitions: one with serde and one without.
-
     /// The key exchange's public key type. If you want to generate a keypair, see
     /// `Kem::gen_keypair` or `Kem::derive_keypair`
-    #[cfg(feature = "serde_impls")]
-    type PublicKey: Clone
-        + Debug
-        + PartialEq
-        + Eq
-        + Serializable
-        + Deserializable
-        + SerdeSerialize
-        + for<'a> SerdeDeserialize<'a>;
-    /// The key exchange's public key type. If you want to generate a keypair, see
-    /// `Kem::gen_keypair` or `Kem::derive_keypair`
-    #[cfg(not(feature = "serde_impls"))]
     type PublicKey: Clone + Debug + PartialEq + Eq + Serializable + Deserializable;
 
     /// The key exchange's private key type. If you want to generate a keypair, see
     /// `Kem::gen_keypair` or `Kem::derive_keypair`
-    #[cfg(feature = "serde_impls")]
-    type PrivateKey: Clone
-        + Serializable
-        + Deserializable
-        + SerdeSerialize
-        + for<'a> SerdeDeserialize<'a>;
-
-    /// The key exchange's private key type. If you want to generate a keypair, see
-    /// `Kem::gen_keypair` or `Kem::derive_keypair`
-    #[cfg(not(feature = "serde_impls"))]
     type PrivateKey: Clone + Serializable + Deserializable;
 
     /// The result of a DH operation
@@ -72,14 +44,11 @@ pub trait DhKeyExchange {
     ) -> (Self::PrivateKey, Self::PublicKey);
 }
 
-#[cfg(any(feature = "p256", feature = "p384"))]
+#[cfg(any(feature = "p256", feature = "p384", feature = "p521"))]
 pub(crate) mod ecdh_nistp;
-#[cfg(feature = "p256")]
-pub use ecdh_nistp::p256::DhP256;
-#[cfg(feature = "p384")]
-pub use ecdh_nistp::p384::DhP384;
 
 #[cfg(feature = "x25519")]
 pub(crate) mod x25519;
-#[cfg(feature = "x25519")]
-pub use x25519::X25519;
+
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub(crate) mod x448;

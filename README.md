@@ -1,8 +1,37 @@
 # TESTING
 
-This is a testing branch for [draft v2](https://www.ietf.org/archive/id/draft-westerbaan-cfrg-hpke-xyber768d00-02.html) of an HPKE _hybrid post-quantum_ ciphersuite. In short, this ciphersuite, X25519Kyber768Draft00, does both X25519 and [Kyber](https://pq-crystals.org/kyber/) encapsulation/decapsulation, and uses _both_ shared secrets to establish a secure session. This construction is secure so long as at least one of its components, X25519 or Kyber, is secure.
+This fork of the rust-hpke project is supplemental material for the paper [Agile, Post-quantum Secure Cryptography in Avionics](https://eprint.iacr.org/2024/667).
 
-**Do NOT use this branch for anything other than testing**
+See the [parent repository](https://github.com/rosenpass/paper-hpke-in-avionics-supplemental) to compile this or to reproduce the benchmarks.
+
+**Do NOT use this fork for anything other than testing**
+
+See the directory src/kem/ for our KEM implementations
+
+- xyber768 - Basic variant of our combiner with post-quantum secrecy and pre-quantum authentication
+- xyber768dilithium - Variant of our combiner with post-quantum secrecy AND post-quantum authentication
+- xyber1024dilithium – Variant of our combiner with extra security (NIST level 5 KEMs and Signatures, x448 instead of x25519 for pre-quantum security)
+
+Our initial submission used pure rust implementations of Kyber and Dilithium. These did not seem very trustworthy, so we decided to use
+up-to-date implementations of ML-KEM and ML-DSA for liboqs, so there are now two variants. ML-KEM/ML-DSA are the names given to Kyber/Dilithium
+after standardization through NIST. In order to be able to understand any performance impact of this change, we kept both variants around.
+
+- *plain variants* – I.e. those without _oqs.rs are using less trustworthy pure rust implementations of the combiner
+- *_oqs variants* – These with the suffix `_oqs.rs` are our updated implementations using liboqs
+
+xyber768dilithium and xyber1024dilithium differ by the amount of additional data that is mixed into the key derivation step.
+xyber1024dilithium includes the kyber ciphertext, the smaller – 768 – variant omits that value. The reasons for this are fairly
+technical; you can read up on the background in the [X-Wing combiner paper](https://eprint.iacr.org/2024/039). We opted to include
+the kyber ciphertext in the stronger variant, because without it we would be relying on the collision resistance of shak256 for
+security. By including the ciphertext we can rely on shake256's pre-image resistance only which provides a better advantage against
+quantum adversaries – according to people we know who are knowledgeable about quantum security analysis.
+
+To estimate the impact of this change we added `_ghp` variants of `xyber768*` so we can directly compare the impact of a slightly more
+involved hashing step.
+
+Finally, we also added a fairly ad-hoc implementation of `DHKEM(X448, HKDF-SHA-512)` (see src/dhkex/x448.rs) to support `xyber1024dilithium`.
+This algorithm is standardized as part of [HPKE - rfc9189](https://datatracker.ietf.org/doc/rfc9180/) but our implementation was written with
+minimal effort. The only sensible use for this particular implementation is benchmarking.
 
 rust-hpke
 =========
@@ -36,7 +65,7 @@ Here are all the primitives listed in the spec. The primitives with checked boxe
     - [ ] DHKEM(Curve448, HKDF-SHA512)
     - [X] DHKEM(P-256, HKDF-SHA256)
     - [X] DHKEM(P-384, HKDF-SHA384)
-    - [ ] DHKEM(P-521, HKDF-SHA512)
+    - [X] DHKEM(P-521, HKDF-SHA512)
 * KDFs
     - [X] HKDF-SHA256
     - [X] HKDF-SHA384
@@ -57,7 +86,7 @@ Feature flag list:
 * `x25519` - Enables X25519-based KEMs
 * `p256` - Enables NIST P-256-based KEMs
 * `p384` - Enables NIST P-384-based KEMs
-* `serde_impls` - Includes implementations of `serde::Serialize` and `serde::Deserialize` for all `hpke::Serializable` and `hpke::Deserializable` types
+* `p521` - Enables NIST P-521-based KEMs
 * `std` - Includes an implementation of `std::error::Error` for `HpkeError`. Also does what `alloc` does.
 
 For info on how to omit or include feature flags, see the [cargo docs on features](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#choosing-features).
@@ -66,6 +95,13 @@ Usage Examples
 --------------
 
 See the [client-server](examples/client_server.rs) example for an idea of how to use HPKE.
+
+Breaking changes
+----------------
+
+### Breaking changes in v0.12
+
+The `serde_impls` feature was removed. If you were using this and require backwards compatible serialization/deserialization, see the wiki page [here](https://github.com/rozbb/rust-hpke/wiki/Migrating-away-from-the-serde_impls-feature).
 
 MSRV
 ----

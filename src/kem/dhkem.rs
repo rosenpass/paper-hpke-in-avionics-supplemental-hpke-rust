@@ -8,21 +8,18 @@ macro_rules! impl_dhkem {
         $kem_id:literal,
         $doc_str:expr
     ) => {
-
-        // Export everything from the crate we define
-        pub use $mod_name::*;
+        pub use $mod_name::$kem_name;
 
         pub(crate) mod $mod_name {
             use crate::{
                 dhkex::{DhKeyExchange, MAX_PUBKEY_SIZE},
                 kdf::{extract_and_expand, Kdf as KdfTrait},
                 kem::{Kem as KemTrait, SharedSecret},
-                util::kem_suite_id,
+                util::{enforce_outbuf_len, kem_suite_id},
                 Deserializable, HpkeError, Serializable,
             };
 
             use digest::OutputSizeUser;
-            use generic_array::GenericArray;
             use rand_core::{CryptoRng, RngCore};
 
             // Define convenience types
@@ -48,8 +45,11 @@ macro_rules! impl_dhkem {
                 type OutputSize = <<$dhkex as DhKeyExchange>::PublicKey as Serializable>::OutputSize;
 
                 // Pass to underlying to_bytes() impl
-                fn to_bytes(&self) -> GenericArray<u8, Self::OutputSize> {
-                    self.0.to_bytes()
+                fn write_exact(&self, buf: &mut [u8]) {
+                    // Check the length is correct and panic if not
+                    enforce_outbuf_len::<Self>(buf);
+
+                    buf.copy_from_slice(&self.0.to_bytes());
                 }
             }
 
@@ -359,6 +359,17 @@ impl_dhkem!(
     "Represents DHKEM(X25519, HKDF-SHA256)"
 );
 
+// Implement DHKEM(X448, HKDF-SHA512)
+#[cfg(feature = "paper_hpke_in_avionics")]
+impl_dhkem!(
+    x448_hkdfsha512,
+    X448HkdfSha512,
+    crate::dhkex::x448::X448,
+    crate::kdf::HkdfSha512,
+    0x0020,
+    "Represents DHKEM(X448, HKDF-SHA512)"
+);
+
 // Implement DHKEM(P-256, HKDF-SHA256)
 #[cfg(feature = "p256")]
 impl_dhkem!(
@@ -379,4 +390,15 @@ impl_dhkem!(
     crate::kdf::HkdfSha384,
     0x0011,
     "Represents DHKEM(P-384, HKDF-SHA384)"
+);
+
+// Implement DHKEM(P-521, HKDF-SHA512)
+#[cfg(feature = "p521")]
+impl_dhkem!(
+    dhp521_hkdfsha512,
+    DhP521HkdfSha512,
+    crate::dhkex::ecdh_nistp::p521::DhP521,
+    crate::kdf::HkdfSha512,
+    0x0012,
+    "Represents DHKEM(P-521, HKDF-SHA512)"
 );

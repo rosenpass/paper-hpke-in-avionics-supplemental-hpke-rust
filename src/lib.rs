@@ -102,7 +102,7 @@ pub(crate) use alloc::vec::Vec;
     feature = "x25519",
     feature = "p256",
     feature = "p384",
-    feature = "xyber768d00"
+    feature = "p521",
 ))]
 mod kat_tests;
 
@@ -119,6 +119,9 @@ pub use rand_core;
 #[macro_use]
 mod util;
 
+#[cfg(feature = "paper_hpke_in_avionics")]
+mod oqs;
+
 pub mod aead;
 mod dhkex;
 pub mod kdf;
@@ -126,9 +129,6 @@ pub mod kem;
 mod op_mode;
 mod setup;
 mod single_shot;
-
-#[cfg(feature = "serde_impls")]
-mod serde_impls;
 
 #[doc(inline)]
 pub use kem::Kem;
@@ -193,9 +193,24 @@ impl core::fmt::Display for HpkeError {
 
 /// Implemented by types that have a fixed-length byte representation
 pub trait Serializable {
+    /// Serialized size in bytes
     type OutputSize: ArrayLength<u8>;
 
-    fn to_bytes(&self) -> GenericArray<u8, Self::OutputSize>;
+    /// Serializes `self` to the given slice. `buf` MUST have length equal to `Self::size()`.
+    ///
+    /// Panics
+    /// ======
+    /// Panics if `buf.len() != Self::size()`.
+    fn write_exact(&self, buf: &mut [u8]);
+
+    /// Serializes `self` to a new array
+    fn to_bytes(&self) -> GenericArray<u8, Self::OutputSize> {
+        // Make a buffer of the correct size and write to it
+        let mut buf = GenericArray::default();
+        self.write_exact(&mut buf);
+        // Return the buffer
+        buf
+    }
 
     /// Returns the size (in bytes) of this type when serialized
     fn size() -> usize {
