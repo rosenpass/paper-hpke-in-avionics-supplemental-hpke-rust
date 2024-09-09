@@ -536,4 +536,23 @@ mod test {
             crate::kem::xyber768dilithium_oqs::X25519Kyber768Dilithium
         );
     }
+
+    #[cfg(feature = "paper_hpke_in_avionics")]
+    mod xyber1024dilithium_oqs_tests {
+        use super::*;
+
+        test_setup_correctness!(
+            test_setup_correctness_xyber1024dilithium_oqs,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber1024dilithium_oqs::X448Kyber1024Dilithium,
+            true
+        );
+        test_setup_soundness!(
+            test_setup_soundness_xyber1024,
+            ChaCha20Poly1305,
+            HkdfSha256,
+            crate::kem::xyber1024dilithium_oqs::X448Kyber1024Dilithium
+        );
+    }
 }
