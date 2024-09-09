@@ -19,6 +19,16 @@ after standardization through NIST. In order to be able to understand any perfor
 - *plain variants* – I.e. those without _oqs.rs are using less trustworthy pure rust implementations of the combiner
 - *_oqs variants* – These with the suffix `_oqs.rs` are our updated implementations using liboqs
 
+xyber768dilithium and xyber1024dilithium differ by the amount of additional data that is mixed into the key derivation step.
+xyber1024dilithium includes the kyber ciphertext, the smaller – 768 – variant omits that value. The reasons for this are fairly
+technical; you can read up on the background in the [X-Wing combiner paper](https://eprint.iacr.org/2024/039). We opted to include
+the kyber ciphertext in the stronger variant, because without it we would be relying on the collision resistance of shak256 for
+security. By including the ciphertext we can rely on shake256's pre-image resistance only which provides a better advantage against
+quantum adversaries – according to people we know who are knowledgeable about quantum security analysis.
+
+To estimate the impact of this change we added `_ghp` variants of `xyber768*` so we can directly compare the impact of a slightly more
+involved hashing step.
+
 Finally, we also added a fairly ad-hoc implementation of `DHKEM(X448, HKDF-SHA-512)` (see src/dhkex/x448.rs) to support `xyber1024dilithium`.
 This algorithm is standardized as part of [HPKE - rfc9189](https://datatracker.ietf.org/doc/rfc9180/) but our implementation was written with
 minimal effort. The only sensible use for this particular implementation is benchmarking.

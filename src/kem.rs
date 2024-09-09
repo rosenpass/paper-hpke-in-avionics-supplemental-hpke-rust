@@ -32,7 +32,13 @@ pub mod xyber1024dilithium;
 pub mod xyber768_oqs;
 
 #[cfg(feature = "paper_hpke_in_avionics")]
+pub mod xyber768_oqs_ghp;
+
+#[cfg(feature = "paper_hpke_in_avionics")]
 pub mod xyber768dilithium_oqs;
+
+#[cfg(feature = "paper_hpke_in_avionics")]
+pub mod xyber768dilithium_oqs_ghp;
 
 #[cfg(feature = "paper_hpke_in_avionics")]
 pub mod xyber1024dilithium_oqs;
