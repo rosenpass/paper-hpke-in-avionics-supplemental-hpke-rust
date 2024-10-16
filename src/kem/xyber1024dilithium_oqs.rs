@@ -105,7 +105,7 @@ impl Deserializable for EncappedKey {
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
-        let sep1 = 32;
+        let sep1 = <<<X448HkdfSha512 as KemTrait>::EncappedKey as Serializable>::OutputSize as ToInt<_>>::INT;
         let sep2 = sep1 + KyberEncappedKeyLen::to_usize();
 
         // Grab the X448 encapped key then the Kyber encapped key. The clone_from_slice(), which
@@ -130,7 +130,7 @@ impl Serializable for PublicKey {
         let k = self.k.as_slice();
         let d = self.d.as_slice();
 
-        let xl : usize = <<<X448HkdfSha512 as KemTrait>::EncappedKey as Serializable>::OutputSize as ToInt<_>>::INT;
+        let xl : usize = <<<X448HkdfSha512 as KemTrait>::PublicKey as Serializable>::OutputSize as ToInt<_>>::INT;
         let kl : usize = k.len();
 
         let (xo, buf) = buf.split_at_mut(xl);
@@ -150,7 +150,7 @@ impl Deserializable for PublicKey {
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
-        let sep1 = 32;
+        let sep1 = <<<X448HkdfSha512 as KemTrait>::PublicKey as Serializable>::OutputSize as ToInt<_>>::INT;
         let sep2 = sep1 + KyberPubkeyLen::to_usize();
 
         // Grab the X448 pubkey then the Kyber pubkey. The clone_from_slice(), which can panic,
@@ -175,7 +175,7 @@ impl Serializable for PrivateKey {
         let k = self.k.as_slice();
         let d = self.d.as_slice();
 
-        let xl : usize = <<<X448HkdfSha512 as KemTrait>::EncappedKey as Serializable>::OutputSize as ToInt<_>>::INT;
+        let xl : usize = <<<X448HkdfSha512 as KemTrait>::PrivateKey as Serializable>::OutputSize as ToInt<_>>::INT;
         let kl : usize = k.len();
 
         let (xo, buf) = buf.split_at_mut(xl);
@@ -195,7 +195,7 @@ impl Deserializable for PrivateKey {
     fn from_bytes(encoded: &[u8]) -> Result<Self, HpkeError> {
         enforce_equal_len(Self::OutputSize::to_usize(), encoded.len())?;
 
-        let sep1 = 32;
+        let sep1 = <<<X448HkdfSha512 as KemTrait>::PrivateKey as Serializable>::OutputSize as ToInt<_>>::INT;
         let sep2 = sep1 + KyberPrivkeyLen::to_usize();
         let sep3 = sep2 + DilithiumPrivkeyLen::to_usize();
 
